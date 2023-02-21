@@ -39,6 +39,7 @@ def dashboard_input():
     max_no_tweets = st.slider("Tweet Count",
                               min_value=1,
                               max_value=1000)
+
     return txt, start_init_date, end_init_date, max_no_tweets
 
 
@@ -60,14 +61,15 @@ def date_check(start_dt, end_dt):
 
 
 # Function for scrapping the data from Twitter using snscrape library
+
 def tweet_scrape(hashtag, st_dt, nd_dt, tweet_count):
     tweet_list = list()
 
     # Enumerate to have control over the number of tweets to be scraped
-    st.subheader("Scraped Data :")
+
     for i, tweet in enumerate(
             twitterscraper.TwitterSearchScraper(f"{hashtag} since:{st_dt} until:{nd_dt}").get_items()):
-        if i > tweet_count:
+        if i >= tweet_count:
             break
 
         # The scrapped data is appended to a list
@@ -95,7 +97,9 @@ def tweet_scrape(hashtag, st_dt, nd_dt, tweet_count):
 
 def tweets_for_dashboard(dict_of_tweets, hashtag):
     df = pd.DataFrame(dict_of_tweets[f"{hashtag}+{current_timestamp}"], dtype=str)
-
+    if st.button("Show Tweets"):
+        st.subheader("Scrapped Data: ")
+        st.dataframe(df)
     return df
 
 
@@ -114,11 +118,15 @@ def data_download(df, hashtag):
 
 # Function for uploading the data in Mongo DB
 def upload_db(dict_of_tweets):
-    st.button("Upload to MongoDB")
-    client = MongoClient("mongodb://localhost:27017/")
-    db = client["twitter_scraping"]
-    col = db["scraped_data"]
-    col.insert_one(dict_of_tweets)
+    if st.button("Upload to MongoDB"):
+        if dict_of_tweets:
+            client = MongoClient("mongodb://localhost:27017/")
+            db = client["twitter_scraping"]
+            col = db["scraped_data"]
+            col.insert_one(dict_of_tweets)
+            st.success('Successfully uploaded to MongoDB', icon="✅")
+        else:
+            st.warning('No tweets to upload', icon="⚠️")
 
 
 # Program execution
@@ -127,24 +135,15 @@ if __name__ == "__main__":
     initial_config()
     # Function call to get all the required data from the dashboard
     text, st_date, nd_date, max_tweets = dashboard_input()
+    # Function call to check for the valid start and end dates
+    start_date, end_date, valid_check = date_check(st_date, nd_date)
 
-    # submit button on dashboard
-    # The scrapped data will appear on the dashboard in the form of a table
-    # All the other functions like downloading the database in csv or json format, uploading the data in noSQL DB,
-    # Will be executed One by One after clicking the submit button
-
-    if st.button("Submit"):
-        # Function call to check for the valid start and end dates
-        start_date, end_date, valid_check = date_check(st_date, nd_date)
-
-        if valid_check:
-            # Function call to scrape the data for the valid dates
-            tweets_dict = tweet_scrape(text, start_date, end_date, max_tweets)
-            # Function call to get the scraped data as data frame
-            df_of_tweets = tweets_for_dashboard(tweets_dict, text)
-            # Displays the data frame on dashboard
-            st.dataframe(df_of_tweets)
-            # Function call to download the data in multiple formats csv/json
-            data_download(df_of_tweets, text)
-            # Upload the scraped data to Mongo DB
-            upload_db(tweets_dict)
+    if text and valid_check:
+        # Function call to scrape the data for the valid dates
+        tweets_dict = tweet_scrape(text, start_date, end_date, max_tweets)
+        # Function call to show tweets in the dashboard and to get the scraped data as data frame
+        df_of_tweets = tweets_for_dashboard(tweets_dict, text)
+        # Function call to download the data in multiple formats csv/json
+        data_download(df_of_tweets, text)
+        # Function call to upload the scraped data to Mongo DB
+        upload_db(tweets_dict)
